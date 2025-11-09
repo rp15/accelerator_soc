@@ -1,0 +1,6 @@
+[submodule "erv_RISC-V"]
+	path = erv_RISC-V
+	url = https://github.com/rp15/erv_RISC-V.git
+[submodule "VectorCGRA"]
+	path = VectorCGRA
+	url = https://github.com/tancheng/VectorCGRA.git

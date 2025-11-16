@@ -4,3 +4,6 @@
 [submodule "VectorCGRA"]
 	path = VectorCGRA
 	url = https://github.com/tancheng/VectorCGRA.git
+[submodule "axi"]
+	path = axi
+	url = https://github.com/pulp-platform/axi.git

@@ -7,3 +7,6 @@
 [submodule "axi"]
 	path = axi
 	url = https://github.com/pulp-platform/axi.git
+[submodule "VectorCGRAfork0"]
+	path = VectorCGRAfork0
+	url = https://github.com/rp15/VectorCGRAfork0.git

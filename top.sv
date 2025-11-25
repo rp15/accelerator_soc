@@ -1,11 +1,11 @@
 // ============================================================================
 // SoC Option A (PULP AXI) — REAL, BIDIRECTIONAL CGRA↔Memory streaming
 //  - CPU (riscV) unchanged, simple DMEM/IMEM ports
-//  - Shared RAM via PULP axi_to_mem → dual-port SRAM (CPU simple + AXI)
+//  - Shared RAM via PULP axi_to_mem -> dual-port SRAM (CPU simple + AXI)
 //  - CGRA packet bridge (AXIS_W=192) to MeshMultiCgra wrapper
 //  - Duplex DMA:
-//      * RX engine: Memory → AXIS (→ CGRA recv_from_cpu)
-//      * TX engine: AXIS (← CGRA send_to_cpu) → Memory
+//      * RX engine: Memory -> AXIS (-> CGRA recv_from_cpu)
+//      * TX engine: AXIS (<- CGRA send_to_cpu) -> Memory
 //    Uses proper AXI bursts (3 beats / 24B per packet) on a 64-bit AXI bus
 //  - CPU MMIO @ 0x0000_0000_4000_0000 controls DMA (start/src/dst/len, status)
 // ============================================================================
@@ -36,10 +36,9 @@ localparam int CGRA_PKT_W = PKT_HDR_W + MCGR_PAY_W; // 185
 
 
 
-function automatic logic [CGRA_PKT_W-1:0]
-pack_pkt (IntraCgraPacket_4_2x2_16_8_2_CgraPayload__432fde8bfb7da0ed p);
+function automatic logic [CGRA_PKT_W-1:0] pack_pkt (IntraCgraPacket_4_2x2_16_8_2_CgraPayload__432fde8bfb7da0ed p);
 pack_pkt = {
-// Header (MSB→LSB order)
+// Header (MSB->LSB order)
 p.src,
 p.dst,
 p.src_cgra_id,
@@ -72,8 +71,7 @@ p.payload.ctrl_addr
 endfunction
 
 
-function automatic IntraCgraPacket_4_2x2_16_8_2_CgraPayload__432fde8bfb7da0ed
-unpack_pkt (logic [CGRA_PKT_W-1:0] v);
+function automatic IntraCgraPacket_4_2x2_16_8_2_CgraPayload__432fde8bfb7da0ed unpack_pkt (logic [CGRA_PKT_W-1:0] v);
 IntraCgraPacket_4_2x2_16_8_2_CgraPayload__432fde8bfb7da0ed p;
 // Use a running index from LSB upward for clarity
 int i = 0;
@@ -160,7 +158,7 @@ typedef logic [AXI_USER_W-1:0] td3;
 // Utility: 64-bit wide, dual-ported SRAM (CPU simple + PULP mem_req*)
 // -----------------------------------------------------------------------------
 module dp_sram_axi_cpu #(
-  parameter longint MEM_BYTES = 1<<20
+  parameter longint DEPTH_WORD = 1024 * 64
 )(
   input  logic        clk,
   input  logic        rstn,
@@ -180,19 +178,19 @@ module dp_sram_axi_cpu #(
   output logic [63:0] mem_rdata
 );
   // Storage
-  byte mem [0:MEM_BYTES-1];
+  logic [63:0] mem [0:DEPTH_WORD-1];
+
+  logic [63:0] cpu_addr_aligned;
+  logic [31:0] mem_addr_aligned;
+  assign cpu_addr_aligned = cpu_addr >> 3;
+  assign mem_addr_aligned = mem_addr >> 3;
+
 
   // Static loop indices (avoid automatic loop vars)
   int unsigned k_cpu_r, k_w, k_r;
 
   // ---------------- CPU read: purely combinational ----------------
-  always_comb begin
-    cpu_rdata = '0;
-    for (k_cpu_r = 0; k_cpu_r < 8; k_cpu_r++) begin
-      longint unsigned a = cpu_addr + k_cpu_r;
-      if (a < MEM_BYTES) cpu_rdata[k_cpu_r*8 +: 8] = mem[a];
-    end
-  end
+  assign cpu_rdata = mem[cpu_addr_aligned];
 
   // ---------------- Unified writer + AXI read model ----------------
   // One always_ff drives: mem_gnt, mem_rvalid, mem_rdata, and *all* writes to mem
@@ -208,26 +206,17 @@ module dp_sram_axi_cpu #(
 
       // AXI read data (one-cycle model)
       if (mem_req && !mem_we) begin
-        for (k_r = 0; k_r < 8; k_r++) begin
-          longint unsigned a = mem_addr + k_r;
-          mem_rdata[k_r*8 +: 8] <= (a < MEM_BYTES) ? mem[a] : '0;
-        end
+        mem_rdata <= mem[mem_addr_aligned];
       end
 
-      // ---- Writes (single writer block) ----
+      // ---- Writes (two-writer block) ----
       // Priority: 1) CPU Port-A 2) AXI Port-B.
       if (cpu_we) begin
-        for (k_w = 0; k_w < 8; k_w++) begin
-          longint unsigned a = cpu_addr + k_w;
-          if (a < MEM_BYTES) mem[a] <= cpu_wdata[k_w*8 +: 8];
-        end
+        mem[cpu_addr_aligned] <= cpu_wdata;
       end
       else if (mem_req && mem_we) begin
-        for (k_w = 0; k_w < 8; k_w++) begin
-          if (mem_strb[k_w]) begin
-            longint unsigned a = mem_addr + k_w;
-            if (a < MEM_BYTES) mem[a] <= mem_wdata[k_w*8 +: 8];
-          end
+        for (int b = 0; b < 8; b++) begin
+          mem[mem_addr_aligned][8*b +: 8] <= {8{mem_strb[b]}} & mem_wdata[8*b +: 8];
         end
       end
     end
@@ -244,6 +233,7 @@ module imem_rom #(parameter int DEPTH = 1024) (
 );
   logic [31:0] mem [0:DEPTH-1];
   //initial for (int i=0;i<DEPTH;i++) mem[i] = 32'h00000013; // ADDI x0,x0,0
+  initial $readmemh("prog.hex", mem);
   assign inst = mem[pc[31:2]];
 endmodule
 
@@ -261,13 +251,13 @@ module axis_dma_duplex #(
   input  logic rstn,
 
   // Control/Status
-  input  logic        start_rx,           // Memory→CGRA
+  input  logic        start_rx,           // Memory->CGRA
   input  logic [63:0] src_addr_rx,
   input  logic [31:0] len_pkts_rx,        // number of 192b packets
   output logic        busy_rx,
   output logic        done_rx,
 
-  input  logic        start_tx,           // CGRA→Memory
+  input  logic        start_tx,           // CGRA->Memory
   input  logic [63:0] dst_addr_tx,
   input  logic [31:0] len_pkts_tx,
   output logic        busy_tx,
@@ -305,7 +295,7 @@ module axis_dma_duplex #(
   end
 
   // ---------------------------------------------------------------------------
-  // RX engine: Memory → AXIS
+  // RX engine: Memory -> AXIS
   // ---------------------------------------------------------------------------
   typedef enum logic [1:0] {RX_IDLE, RX_AR, RX_R, RX_DONE} rx_state_e;
   rx_state_e rx_st; logic [31:0] rx_pkts_left; logic [AXI_ADDR_W-1:0] rx_addr;
@@ -367,7 +357,7 @@ module axis_dma_duplex #(
   assign s_axis_tvalid = (rx_st == RX_R) && (rx_beat_cnt == BEATS_PER_PKT-1) && axi_i.r_valid;
 
   // ---------------------------------------------------------------------------
-  // TX engine: AXIS → Memory
+  // TX engine: AXIS -> Memory
   // ---------------------------------------------------------------------------
   typedef enum logic [2:0] {TX_IDLE, TX_CAPTURE, TX_AW, TX_W, TX_B, TX_DONE} tx_state_e;
   tx_state_e tx_st; logic [31:0] tx_pkts_left; logic [AXI_ADDR_W-1:0] tx_addr;
@@ -441,11 +431,11 @@ endmodule
 // -----------------------------------------------------------------------------
 // ============================================================
 // 1-beat AXI-Stream bridge to MeshMultiCgraRTL ports
-// - s_axis_* : DMA → CGRA (CPU→CGRA direction)
-// - m_axis_* : CGRA → DMA (CGRA→CPU direction)
+// - s_axis_* : DMA -> CGRA (CPU->CGRA direction)
+// - m_axis_* : CGRA -> DMA (CGRA->CPU direction)
 // ============================================================
 module cgra_axis_bridge #(
-parameter int AXIS_W = 192 // must be ≥ cgra_pkt_pkg::CGRA_PKT_W (185)
+parameter int AXIS_W = 192 // must be >= cgra_pkt_pkg::CGRA_PKT_W (185)
 )(
 input logic clk,
 input logic rstn,
@@ -463,7 +453,7 @@ output logic m_axis_tvalid,
 input logic m_axis_tready,
 
 
-// ------------------ CGRA native ports -----------------------------
+// ------------------ CGRA ports -----------------------------
 output IntraCgraPacket_4_2x2_16_8_2_CgraPayload__432fde8bfb7da0ed recv_from_cpu_pkt__msg,
 input logic [0:0] recv_from_cpu_pkt__rdy,
 output logic [0:0] recv_from_cpu_pkt__val,
@@ -480,10 +470,16 @@ localparam int PAD_W = (AXIS_W >= PKT_W) ? (AXIS_W - PKT_W) : -1;
 initial if (AXIS_W < PKT_W) $error("AXIS_W (%0d) < CGRA packet width (%0d)", AXIS_W, PKT_W);
 
 
-// ---------- Ingress: AXIS → CGRA ----------
+// ---------- Ingress: AXIS -> CGRA ----------
 // 1-beat transfer: when both s_axis_tvalid && recv_from_cpu_pkt__rdy
 assign s_axis_tready = recv_from_cpu_pkt__rdy;
 assign recv_from_cpu_pkt__val = s_axis_tvalid;
+assign recv_from_cpu_pkt__msg = unpack_pkt(s_axis_tdata);
+
+assign send_to_cpu_pkt__rdy = m_axis_tready;
+assign m_axis_tvalid = send_to_cpu_pkt__val;
+assign m_axis_tdata = pack_pkt(send_to_cpu_pkt__msg);
+
 endmodule
 // -----------------------------------------------------------------------------
 // TOP: SoC with MMIO @ 0x0000_0000_4000_0000 controlling the duplex DMA
@@ -507,11 +503,24 @@ module soc_option_a_pulp_top_real_duplex (
     .readData1_RF(readData1_RF), .readData2_RF(readData2_RF),
     .readAddr1_RF(readAddr1_RF), .readAddr2_RF(readAddr2_RF),
     .writeData_RF(writeData_RF), .writeAddr_RF(writeAddr_RF), .RegWrite_RF(RegWrite_RF),
-    .clk(clk), .rst(~rstn)
+    .clk(clk), .rst(rstn)
   );
 
   // IMEM ROM
   imem_rom u_imem(.pc(PC_IMEM[31:0]), .inst(inst));
+
+  // Register-file model
+  logic [63:0] rf [0:31];
+
+  // Drive reads combinationally
+  assign readData1_RF = (readAddr1_RF == 0) ? 64'd0 : rf[readAddr1_RF];
+  assign readData2_RF = (readAddr2_RF == 0) ? 64'd0 : rf[readAddr2_RF];
+
+  // Capture writes
+  always_ff @(posedge clk) begin
+    if (RegWrite_RF && (writeAddr_RF != 0))
+      rf[writeAddr_RF] <= writeData_RF;
+  end
 
 
 
@@ -522,8 +531,8 @@ module soc_option_a_pulp_top_real_duplex (
 
   // Simple MMIO register map (all 64b unless noted):
   //  0x00 CONTROL   [0]=start_rx, [1]=start_tx, [8]=irq_en (optional)
-  //  0x08 SRC_RX    64b byte addr (memory→CGRA)
-  //  0x10 DST_TX    64b byte addr (CGRA→memory)
+  //  0x08 SRC_RX    64b byte addr (memory->CGRA)
+  //  0x10 DST_TX    64b byte addr (CGRA->memory)
   //  0x18 LEN_RX    32b packet count
   //  0x1C LEN_TX    32b packet count
   //  0x20 STATUS    [0]=busy_rx, [1]=done_rx, [2]=busy_tx, [3]=done_tx
@@ -575,7 +584,7 @@ module soc_option_a_pulp_top_real_duplex (
 
 
 
-  // AXI master from DMA → AXI-to-mem → SRAM
+  // AXI master from DMA -> AXI-to-mem -> SRAM
   axi_req_t  dma_axi_req; axi_resp_t dma_axi_rsp;
   logic       mem_req, mem_gnt, mem_we, mem_rvalid; logic [31:0] mem_addr; logic [63:0] mem_wdata, mem_rdata; logic [7:0] mem_strb;
 
@@ -636,7 +645,7 @@ module soc_option_a_pulp_top_real_duplex (
   logic [0:0] recv_val, recv_rdy;
   logic [0:0] send_val, send_rdy;
 
-  // Bridge between AXIS and native CGRA packet ports
+  // Bridge between AXIS and CGRA packet ports
   cgra_axis_bridge #(.AXIS_W(AXIS_W)) u_cgra_bridge (
     .clk(clk), .rstn(rstn),
     .s_axis_tdata (to_cgra_tdata), .s_axis_tvalid(to_cgra_tvalid), .s_axis_tready(to_cgra_tready),

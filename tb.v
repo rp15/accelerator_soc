@@ -18,7 +18,92 @@ module tb
   logic [0:0] clk;
   logic [0:0] reset;
 
-  soc_option_a_pulp_top_real_duplex u_top ( .clk, .rstn(~reset) );
+  soc_option_a_pulp_top_real_duplex dut ( .clk, .rstn(~reset) );
+
+  localparam int N_PKTS   = 3;
+  localparam longint SRC  = 64'h0000_0000_0000_1000; // must be inside SRAM range
+  localparam longint DST  = 64'h0000_0000_0000_2000;
+
+
+  int errors = 0;
+
+
+  // Build a simple packet pattern
+  function automatic IntraCgraPacket_4_2x2_16_8_2_CgraPayload__432fde8bfb7da0ed mk_pkt(int idx);
+    IntraCgraPacket_4_2x2_16_8_2_CgraPayload__432fde8bfb7da0ed p;
+    p.src         = 5'(idx);
+    p.dst         = 5'(idx+1);
+    p.src_cgra_id = 2'(1);
+    p.dst_cgra_id = 2'(2);
+    p.src_cgra_x  = 1'(0);
+    p.src_cgra_y  = 1'(0);
+    p.dst_cgra_x  = 1'(0);
+    p.dst_cgra_y  = 1'(1);
+    p.opaque      = 8'(8'hA0 + idx);
+    p.vc_id       = 1'(0);
+    p.payload.cmd = 5'(idx);
+    p.payload.data.payload  = 32'(32'hDEAD_0000 + idx);
+    p.payload.data.predicate= 1'(1);
+    p.payload.data.bypass   = 1'(0);
+    p.payload.data.delay    = 1'(0);
+    p.payload.data_addr     = 7'(idx);
+    p.payload.ctrl.operation= 7'(3);
+    p.payload.ctrl.fu_in                = '{default:3'(0)};
+    p.payload.ctrl.routing_xbar_outport = '{default:3'(0)};
+    p.payload.ctrl.fu_xbar_outport      = '{default:2'(0)};
+    p.payload.ctrl.vector_factor_power  = 3'(0);
+    p.payload.ctrl.is_last_ctrl         = 1'(1);
+    p.payload.ctrl.write_reg_from       = '{default:2'(0)};
+    p.payload.ctrl.write_reg_idx        = '{default:4'(0)};
+    p.payload.ctrl.read_reg_from        = '{default:1'(0)};
+    p.payload.ctrl.read_reg_idx         = '{default:4'(0)};
+    p.payload.ctrl_addr = 4'(idx);
+    return p;
+  endfunction
+
+  // Helper to write 24-byte packet into DUT SRAM by hierarchical access
+  task automatic sram_write24(longint addr, logic [191:0] d);
+    // dp_sram is inside the top as u_sram, array is 'mem' (bytes)
+    for (int b = 0; b < 24; b++) begin
+      dut.u_sram.mem[addr + b] = d[b*8 +: 8];
+    end
+  endtask
+
+  // Helper to read back 24 bytes from SRAM
+  function automatic logic [191:0] sram_read24(longint addr);
+    logic [191:0] out;
+    for (int b = 0; b < 24; b++) begin
+      out[b*8 +: 8] = dut.u_sram.mem[addr + b];
+    end
+    return out;
+  endfunction
+
+  // MMIO writer via direct register access (bypassing CPU)
+  task automatic mmio_program_and_start(longint src, longint dst, int len_pkts);
+    // Program the internal MMIO regs directly
+    dut.reg_src_rx <= src;
+    dut.reg_dst_tx <= dst;
+    dut.reg_len_rx <= len_pkts;
+    dut.reg_len_tx <= len_pkts;
+    // one-shot start strobes
+    dut.reg_start_rx <= 1'b1;
+    dut.reg_start_tx <= 1'b1;
+    @(posedge clk);
+    dut.reg_start_rx <= 1'b0;
+    dut.reg_start_tx <= 1'b0;
+  endtask
+
+  function automatic [31:0] enc_ADDI(input [4:0] rd, rs1, input integer imm);
+    // opcode=0010011, funct3=000
+    enc_ADDI = { {20{imm[11]}}, imm[11:0], rs1, 3'b000, rd, 7'b0010011 };
+  endfunction
+
+  function automatic [31:0] enc_SD (input [4:0] rs2, rs1, input integer imm);
+    // S-type: opcode=0100011, funct3=011 (SD), imm[11:5], rs2, rs1, imm[4:0]
+    enc_SD = { imm[11:5], rs2, rs1, 3'b011, imm[4:0], 7'b0100011 };
+  endfunction
+
+
 
   initial
   begin
@@ -39,6 +124,63 @@ module tb
     #50
     reset = 1'b0;
     #10
+/*
+    // 1) Preload N source packets in SRAM at SRC
+    for (int i = 0; i < N_PKTS; i++) begin
+      automatic IntraCgraPacket_4_2x2_16_8_2_CgraPayload__432fde8bfb7da0ed p = mk_pkt(i);
+      automatic logic [CGRA_PKT_W-1:0] flat = pack_pkt(p);
+      // place into 192b container (low bits used)
+      logic [191:0] beat = '0;
+      beat[CGRA_PKT_W-1:0] = flat;
+      // TODO sram_write24(SRC + i*24, beat);
+    end
+
+    // 2) Program DMA MMIO and start both directions
+    // TODO mmio_program_and_start(SRC, DST, N_PKTS);
+
+    // 3) Wait for both done flags
+    wait (dut.stat_done_rx && dut.stat_done_tx);
+
+    // 4) Check destination equals source for each packet (echo behavior)
+    for (int j = 0; j < N_PKTS; j++) begin
+      automatic logic [191:0] src_pkt = sram_read24(SRC + j*24);
+      automatic logic [191:0] dst_pkt = sram_read24(DST + j*24);
+      if (dst_pkt !== src_pkt) begin
+        $display("[ERR] Packet %0d mismatch: dst=%h src=%h", j, dst_pkt, src_pkt);
+        errors++;
+      end else begin
+        $display("[OK ] Packet %0d matches: %h", j, dst_pkt);
+      end
+    end
+
+    if (errors == 0) $display("[PASS] %0d packets moved mem->CGRA->mem correctly", N_PKTS);
+    else             $display("[FAIL] %0d errors", errors);
+*/
+    repeat (200) @(posedge clk);
+
+    // Inspect the first few destination packets.
+    for (int i=0;i<3;i++) begin
+      $display("DST packet %0d: %02x %02x %02x", i,
+        dut.u_sram.mem[(64'h2000 + i*24 +  0) >> 3],
+        dut.u_sram.mem[(64'h2000 + i*24 +  8) >> 3],
+        dut.u_sram.mem[(64'h2000 + i*24 + 16) >> 3]);
+    end
+
+    $display("IMEM:");
+    for (int b=0;b<200;b++)
+      $display("%02x", dut.u_imem.mem[b]);
+
+    $display("ADDI %02x", enc_ADDI(6, 6, 'h456));
+    $display("ADDI %02x", enc_ADDI(5, 5, 'h888));
+    $display("SD   %02x", enc_SD(6, 1, 'h0));
+    $display("SD   %02x", enc_SD(6, 6, 'h0));
+
+    $display("RF:");
+    for (int b=0;b<32;b++)
+      $display("%02x", dut.rf[b]);
+
+    $display("SRAM[0x1000..0x1007]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_1000 >> 3]);
 
 
     $finish();
@@ -54,6 +196,7 @@ module tb
   always @ (posedge clk or negedge clk)
   begin
     #1
+    $display("%d", dut.u_cpu.PC);
     /*$display("%t: clk %d reset %d recv_from_noc__rdy %d", $time(), clk, reset, recv_from_noc__rdy);
     $display("%t: e_recv_rdy[0] %d e_in_val[0] %d e_recv_rdy[1] %d e_in_val[1] %d", $time(), recv_data_on_boundary_east__rdy[0], recv_data_on_boundary_east__val[0], recv_data_on_boundary_east__rdy[1], recv_data_on_boundary_east__val[1]);
     $display("%t: recv_from_cpu_ctrl_pkt__rdy %d recv_from_cpu_ctrl_pkt__val %d val_rtl %d", $time(), recv_from_cpu_ctrl_pkt__rdy, recv_from_cpu_ctrl_pkt__val, CGRA.controller.recv_from_cpu_ctrl_pkt__val);
@@ -79,7 +222,7 @@ module tb
     $display("%t: cgra0datamem wdata3 ready %d val %d", $time, MultiCGRA.cgra__0.data_mem.recv_wdata__rdy[3], MultiCGRA.cgra__0.data_mem.recv_wdata__val[3]);
     */
     //$display("%t: init_mem_done %d", $time, MultiCGRA.cgra__0.data_mem.init_mem_done);
-    $display("%t: ", $time);
+    // TODO $display("%t: ", $time);
     /*$display("%t: cgra0datamem wdata0 ready %d val %d", $time, MultiCGRA.cgra__0.data_mem.recv_wdata__rdy[0], MultiCGRA.cgra__0.data_mem.recv_wdata__val[0]);
     //$display("%t: cgra0rf0 wen %d", $time, MultiCGRA.cgra__0.data_mem.reg_file__wen[0][0]);
     //$display("%t: cgra0rf1 wen %d", $time, MultiCGRA.cgra__0.data_mem.reg_file__wen[1][0]);

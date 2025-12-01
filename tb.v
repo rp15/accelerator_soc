@@ -156,7 +156,7 @@ module tb
     if (errors == 0) $display("[PASS] %0d packets moved mem->CGRA->mem correctly", N_PKTS);
     else             $display("[FAIL] %0d errors", errors);
 */
-    repeat (200) @(posedge clk);
+    repeat (100) @(posedge clk);
 
     // Inspect the first few destination packets.
     for (int i=0;i<3;i++) begin
@@ -167,7 +167,7 @@ module tb
     end
 
     $display("IMEM:");
-    for (int b=0;b<200;b++)
+    for (int b=0;b<100;b++)
       $display("%02x", dut.u_imem.mem[b]);
 
     $display("ADDI %02x", enc_ADDI(6, 6, 'h456));
@@ -181,6 +181,48 @@ module tb
 
     $display("SRAM[0x1000..0x1007]:");
     $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_1000 >> 3]);
+    $display("SRAM[0x1008..0x100f]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_1008 >> 3]);
+    $display("SRAM[0x1010..0x1017]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_1010 >> 3]);
+
+    $display("SRAM[0x1018..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_1018 >> 3]);
+    $display("SRAM[0x1020..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_1020 >> 3]);
+    $display("SRAM[0x1028..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_1028 >> 3]);
+
+    $display("SRAM[0x1030..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_1030 >> 3]);
+    $display("SRAM[0x1038..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_1038 >> 3]);
+    $display("SRAM[0x1040..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_1040 >> 3]);
+
+    $display("SRAM[0x1048..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_1048 >> 3]);
+    $display("SRAM[0x1050..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_1050 >> 3]);
+    $display("SRAM[0x1058..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_1058 >> 3]);
+
+
+    $display("SRAM[0x2000..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_2000 >> 3]);
+    $display("SRAM[0x2008..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_2008 >> 3]);
+    $display("SRAM[0x2010..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_2010 >> 3]);
+    $display("SRAM[0x2018..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_2018 >> 3]);
+
+
+    $display("MMIO:");
+    $display("%09b", {dut.reg_irq_en, 6'b0, dut.reg_start_tx, dut.reg_start_rx});
+    $display("%02x %02x", dut.reg_src_rx, dut.reg_dst_tx);
+    $display("%02x %02x", dut.reg_len_rx, dut.reg_len_tx);
+    $display("%04b", {dut.stat_done_tx, dut.stat_busy_tx, dut.stat_done_rx, dut.stat_busy_rx});
 
 
     $finish();
@@ -197,6 +239,7 @@ module tb
   begin
     #1
     $display("%d", dut.u_cpu.PC);
+    $display("%09b %04b", {dut.reg_irq_en, 6'b0, dut.reg_start_tx, dut.reg_start_rx}, {dut.stat_done_tx, dut.stat_busy_tx, dut.stat_done_rx, dut.stat_busy_rx});
     /*$display("%t: clk %d reset %d recv_from_noc__rdy %d", $time(), clk, reset, recv_from_noc__rdy);
     $display("%t: e_recv_rdy[0] %d e_in_val[0] %d e_recv_rdy[1] %d e_in_val[1] %d", $time(), recv_data_on_boundary_east__rdy[0], recv_data_on_boundary_east__val[0], recv_data_on_boundary_east__rdy[1], recv_data_on_boundary_east__val[1]);
     $display("%t: recv_from_cpu_ctrl_pkt__rdy %d recv_from_cpu_ctrl_pkt__val %d val_rtl %d", $time(), recv_from_cpu_ctrl_pkt__rdy, recv_from_cpu_ctrl_pkt__val, CGRA.controller.recv_from_cpu_ctrl_pkt__val);

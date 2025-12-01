@@ -149,6 +149,45 @@ typedef logic [AXI_USER_W-1:0] td3;
 
 
 
+// MeshMultiCgraRTL__fifo
+module MeshMultiCgraRTL__fifo
+(
+  input  logic [0:0] clk,
+  input  logic [0:0] reset,
+  input  IntraCgraPacket_4_2x2_16_8_2_CgraPayload__432fde8bfb7da0ed recv_from_cpu_pkt__msg,
+  output logic [0:0] recv_from_cpu_pkt__rdy,
+  input  logic [0:0] recv_from_cpu_pkt__val,
+  output IntraCgraPacket_4_2x2_16_8_2_CgraPayload__432fde8bfb7da0ed send_to_cpu_pkt__msg,
+  input  logic [0:0] send_to_cpu_pkt__rdy,
+  output logic [0:0] send_to_cpu_pkt__val
+);
+  // Always ready to take a packet
+  assign recv_from_cpu_pkt__rdy = 1'b1;
+
+  // Simple 2-entry skid buffer (one-packet deep is usually enough)
+  typedef IntraCgraPacket_4_2x2_16_8_2_CgraPayload__432fde8bfb7da0ed pkt_t;
+  pkt_t q;
+  logic full;
+
+  always_ff @(posedge clk or posedge reset) begin
+    if (reset) begin
+      full <= 1'b0;
+    end else begin
+      // Capture when incoming valid and buffer empty
+      if (recv_from_cpu_pkt__val && !full) begin
+        q    <= recv_from_cpu_pkt__msg; // echo the exact packet
+        full <= 1'b1;
+      end
+      // Dequeue when downstream ready
+      if (send_to_cpu_pkt__rdy && full) begin
+        full <= 1'b0;
+      end
+    end
+  end
+
+  assign send_to_cpu_pkt__msg = q;
+  assign send_to_cpu_pkt__val = full;
+endmodule
 
 
 
@@ -191,23 +230,25 @@ module dp_sram_axi_cpu #(
 
   // ---------------- CPU read: purely combinational ----------------
   assign cpu_rdata = mem[cpu_addr_aligned];
-
+  assign mem_rdata = mem[mem_addr_aligned];
+  assign mem_rvalid = mem_req & ~mem_we;
+  assign mem_gnt    = mem_req & ~cpu_we;
   // ---------------- Unified writer + AXI read model ----------------
   // One always_ff drives: mem_gnt, mem_rvalid, mem_rdata, and *all* writes to mem
   always_ff @(posedge clk or negedge rstn) begin
-    if (!rstn) begin
-      mem_gnt    <= 1'b0;
-      mem_rvalid <= 1'b0;
-      mem_rdata  <= '0;
+    if (!rstn) begin;
+      //mem_gnt    <= 1'b0;
+      //mem_rvalid <= 1'b0;
+      //mem_rdata  <= '0;
     end else begin
       // Default handshakes
-      mem_gnt    <= mem_req & ~cpu_we;
-      mem_rvalid <= mem_req & ~mem_we;
+      //mem_gnt    <= mem_req & ~cpu_we;
+      //mem_rvalid <= mem_req & ~mem_we;
 
       // AXI read data (one-cycle model)
-      if (mem_req && !mem_we) begin
-        mem_rdata <= mem[mem_addr_aligned];
-      end
+      //if (mem_req && !mem_we) begin
+      //  mem_rdata <= mem[mem_addr_aligned];
+      //end
 
       // ---- Writes (two-writer block) ----
       // Priority: 1) CPU Port-A 2) AXI Port-B.
@@ -307,20 +348,26 @@ module axis_dma_duplex #(
   always_ff @(posedge clk or negedge rstn) begin
     if (!rstn) begin
       rx_st <= RX_IDLE; rx_pkts_left <= '0; rx_addr <= '0; rx_beat_cnt <= '0; rx_shift <= '0;
+      req_q.ar_valid <= '0;
+      req_q.ar <= '0;
+      req_q.r_ready <= '0;
     end else begin
       unique case (rx_st)
         RX_IDLE: if (start_rx) begin
           rx_pkts_left <= len_pkts_rx;
           rx_addr      <= src_addr_rx[AXI_ADDR_W-1:0];
           rx_st        <= RX_AR;
+          req_q.r_ready <= 1'b0;
+          req_q.ar_valid <= 1'b1; req_q.ar.addr <= src_addr_rx[AXI_ADDR_W-1:0]; req_q.ar.len <= 'd2; req_q.ar.burst <= 'd1; req_q.ar.size <= 'd3;
         end
         RX_AR: begin
           // drive AR until accepted
-          req_q.ar_valid <= 1'b1; req_q.ar.addr <= rx_addr;
+          req_q.ar_valid <= 1'b1; req_q.ar.addr <= rx_addr; req_q.ar.len <= 'd2; req_q.ar.burst <= 'd1; req_q.ar.size <= 'd3;
           if (axi_i.ar_ready) begin
             req_q.ar_valid <= 1'b0;
             rx_beat_cnt <= '0;
             rx_st <= RX_R;
+            req_q.r_ready <= 1'b1;
           end
         end
         RX_R: begin
@@ -338,8 +385,11 @@ module axis_dma_duplex #(
                   rx_pkts_left <= rx_pkts_left - 1;
                   rx_addr      <= rx_addr + BEATS_PER_PKT*(AXI_DATA_W/8);
                   rx_st        <= RX_AR;
+                  req_q.r_ready <= 1'b0;
+                  req_q.ar_valid <= 1'b1; req_q.ar.addr <= rx_addr + BEATS_PER_PKT*(AXI_DATA_W/8); req_q.ar.len <= 'd2; req_q.ar.burst <= 'd1; req_q.ar.size <= 'd3;
                 end else begin
                   rx_st <= RX_DONE;
+                  req_q.r_ready <= 1'b0;
                 end
               end
             end else begin
@@ -353,7 +403,8 @@ module axis_dma_duplex #(
   end
 
   // Present packet to AXIS sink (CGRA) when a full packet is buffered
-  assign s_axis_tdata  = rx_shift;
+  assign s_axis_tdata[(BEATS_PER_PKT-1)*AXI_DATA_W +: AXI_DATA_W] = axi_i.r.data;
+  assign s_axis_tdata[0 +: (BEATS_PER_PKT-1)*AXI_DATA_W]          = rx_shift[0 +: (BEATS_PER_PKT-1)*AXI_DATA_W];
   assign s_axis_tvalid = (rx_st == RX_R) && (rx_beat_cnt == BEATS_PER_PKT-1) && axi_i.r_valid;
 
   // ---------------------------------------------------------------------------
@@ -372,6 +423,11 @@ module axis_dma_duplex #(
   always_ff @(posedge clk or negedge rstn) begin
     if (!rstn) begin
       tx_st <= TX_IDLE; tx_pkts_left <= '0; tx_addr <= '0; tx_beat_cnt <= '0; tx_buf <= '0;
+      req_q.aw_valid <= 1'b0;
+      req_q.aw <= '0;
+      req_q.w <= '0;
+      req_q.w_valid <= 1'b0;
+      req_q.b_ready <= 1'b0;
     end else begin
       unique case (tx_st)
         TX_IDLE: if (start_tx) begin
@@ -383,26 +439,36 @@ module axis_dma_duplex #(
           if (m_axis_tvalid) begin
             tx_buf <= m_axis_tdata;
             tx_st  <= TX_AW;
+            //req_q.aw_valid <= 1'b1; req_q.aw.addr <= tx_addr; req_q.aw.len <= 'd2; req_q.aw.burst <= 'd1; req_q.aw.size <= 'd3;
+            //req_q.w_valid <= 1'b1; req_q.w.data <= tx_buf[tx_beat_cnt*AXI_DATA_W +: AXI_DATA_W]; req_q.w.strb <= {8{1'b1}}; req_q.w.last <= (tx_beat_cnt == BEATS_PER_PKT-1);
           end
         end
         TX_AW: begin
-          req_q.aw_valid <= 1'b1; req_q.aw.addr <= tx_addr;
-          if (axi_i.aw_ready) begin
+          req_q.aw_valid <= 1'b1; req_q.aw.addr <= tx_addr; req_q.aw.len <= 'd2; req_q.aw.burst <= 'd1; req_q.aw.size <= 'd3;
+          req_q.w_valid <= 1'b1; req_q.w.data <= tx_buf[tx_beat_cnt*AXI_DATA_W +: AXI_DATA_W]; req_q.w.strb <= {8{1'b1}}; req_q.w.last <= (tx_beat_cnt == BEATS_PER_PKT-1);
+          req_q.b_ready <= 1'b1;
+          if (axi_i.aw_ready && (tx_beat_cnt != BEATS_PER_PKT-1) ) begin // 1 != BEATS_PER_PKT
             req_q.aw_valid <= 1'b0;
-            tx_beat_cnt <= '0;
+            tx_beat_cnt <= 'b1;
             tx_st <= TX_W;
+            req_q.w_valid <= 1'b1; req_q.w.data <= tx_buf[1*AXI_DATA_W +: AXI_DATA_W]; req_q.w.strb <= {8{1'b1}}; req_q.w.last <= (1 == BEATS_PER_PKT-1);
+          end else if (axi_i.aw_ready && (tx_beat_cnt == BEATS_PER_PKT-1) ) begin // 1 == BEATS_PER_PKT
+            tx_st <= TX_B;
           end
         end
         TX_W: begin
-          req_q.w_valid <= 1'b1;
+          //req_q.aw_valid <= 1'b1; req_q.aw.addr <= tx_addr; req_q.aw.len <= 'd2; req_q.aw.burst <= 'd1; req_q.aw.size <= 'd3;
           // drive each 64-bit chunk sequentially
-          req_q.w.data  <= tx_buf[tx_beat_cnt*AXI_DATA_W +: AXI_DATA_W];
-          req_q.w.last  <= (tx_beat_cnt == BEATS_PER_PKT-1);
+          req_q.w_valid <= 1'b1; req_q.w.data <= tx_buf[tx_beat_cnt*AXI_DATA_W +: AXI_DATA_W]; req_q.w.strb <= {8{1'b1}}; req_q.w.last  <= (tx_beat_cnt == BEATS_PER_PKT-1);
+          req_q.b_ready <= 1'b1;
           if (axi_i.w_ready) begin
             if (tx_beat_cnt == BEATS_PER_PKT-1) begin
+              req_q.b_ready <= 1'b1;
               tx_st <= TX_B;
+              req_q.w_valid <= 1'b0;
             end else begin
               tx_beat_cnt <= tx_beat_cnt + 1'b1;
+              req_q.w_valid <= 1'b1; req_q.w.data <= tx_buf[(tx_beat_cnt+1'b1)*AXI_DATA_W +: AXI_DATA_W]; req_q.w.strb <= {8{1'b1}}; req_q.w.last  <= ((tx_beat_cnt+1'b1) == BEATS_PER_PKT-1);
             end
           end
         end
@@ -474,12 +540,85 @@ initial if (AXIS_W < PKT_W) $error("AXIS_W (%0d) < CGRA packet width (%0d)", AXI
 // 1-beat transfer: when both s_axis_tvalid && recv_from_cpu_pkt__rdy
 assign s_axis_tready = recv_from_cpu_pkt__rdy;
 assign recv_from_cpu_pkt__val = s_axis_tvalid;
-assign recv_from_cpu_pkt__msg = unpack_pkt(s_axis_tdata);
+assign recv_from_cpu_pkt__msg = unpack_pkt(s_axis_tdata[PKT_W-1:0]);
 
 assign send_to_cpu_pkt__rdy = m_axis_tready;
 assign m_axis_tvalid = send_to_cpu_pkt__val;
-assign m_axis_tdata = pack_pkt(send_to_cpu_pkt__msg);
+assign m_axis_tdata[PKT_W-1:0] = pack_pkt(send_to_cpu_pkt__msg);
+assign m_axis_tdata[AXIS_W-1:PKT_W] = '0;
+/*
+assign recv_from_cpu_pkt__val = s_axis_tvalid;
+assign s_axis_tready          = recv_from_cpu_pkt__rdy[0];
+assign recv_from_cpu_pkt__msg = unpack_pkt(s_axis_tdata[PKT_W-1:0]);
 
+assign m_axis_tvalid          = send_to_cpu_pkt__val[0];
+assign send_to_cpu_pkt__rdy   = { m_axis_tready };
+assign m_axis_tdata[PKT_W-1:0]= pack_pkt(send_to_cpu_pkt__msg);
+assign m_axis_tdata[AXIS_W-1:PKT_W] = '0;
+*/
+/*
+// ============================================================================
+  // Ingress path: AXIS -> (buffer) -> CGRA.recv_from_cpu_pkt
+  // ============================================================================
+  // One-entry skid buffer to avoid combinational loops and ease timing
+  logic               in_full;
+  logic [AXIS_W-1:0]  in_data_q;
+
+  // Accept from AXIS when buffer not full
+  assign s_axis_tready = ~in_full;
+
+  // Buffer fill / drain
+  always_ff @(posedge clk or negedge rstn) begin
+    if (!rstn) begin
+      in_full   <= 1'b0;
+      in_data_q <= '0;
+    end else begin
+      // Fill on handshake if empty
+      if (!in_full && s_axis_tvalid && s_axis_tready) begin
+        in_data_q <= s_axis_tdata;
+        in_full   <= 1'b1;
+      end
+      // Drain to CGRA when it takes it
+      if (in_full && recv_from_cpu_pkt__rdy[0]) begin
+        in_full <= 1'b0;
+      end
+    end
+  end
+
+  // Drive CGRA typed message/val from buffer
+  assign recv_from_cpu_pkt__val = in_full;
+  assign recv_from_cpu_pkt__msg = unpack_pkt(in_data_q[PKT_W-1:0]);
+
+  // ============================================================================
+  // Egress path: CGRA.send_to_cpu_pkt -> (buffer) -> AXIS
+  // ============================================================================
+  logic               out_full;
+  logic [AXIS_W-1:0]  out_data_q;
+
+  // Backpressure toward CGRA (ready only when buffer has space)
+  assign send_to_cpu_pkt__rdy = {~out_full};
+
+  // Capture from CGRA when it produces and buffer empty
+  always_ff @(posedge clk or negedge rstn) begin
+    if (!rstn) begin
+      out_full   <= 1'b0;
+      out_data_q <= '0;
+    end else begin
+      if (!out_full && send_to_cpu_pkt__val[0] && send_to_cpu_pkt__rdy[0]) begin
+        out_data_q                <= '0;
+        out_data_q[PKT_W-1:0]     <= pack_pkt(send_to_cpu_pkt__msg);
+        out_full                  <= 1'b1;
+      end
+      // AXIS consumer handshake drains the buffer
+      if (out_full && m_axis_tready) begin
+        out_full <= 1'b0;
+      end
+    end
+  end
+
+  assign m_axis_tvalid = out_full;
+  assign m_axis_tdata  = out_data_q;
+*/
 endmodule
 // -----------------------------------------------------------------------------
 // TOP: SoC with MMIO @ 0x0000_0000_4000_0000 controlling the duplex DMA
@@ -568,7 +707,7 @@ module soc_option_a_pulp_top_real_duplex (
   logic [63:0] mmio_rdata;
   always_comb begin
     unique case (addrData_DMEM[7:0])
-      8'h00: mmio_rdata = {55'b0, reg_irq_en, 7'b0, reg_start_tx, reg_start_rx};
+      8'h00: mmio_rdata = {55'b0, reg_irq_en, 6'b0, reg_start_tx, reg_start_rx};
       8'h08: mmio_rdata = reg_src_rx;
       8'h10: mmio_rdata = reg_dst_tx;
       8'h18: mmio_rdata = {32'b0, reg_len_rx};
@@ -588,13 +727,16 @@ module soc_option_a_pulp_top_real_duplex (
   axi_req_t  dma_axi_req; axi_resp_t dma_axi_rsp;
   logic       mem_req, mem_gnt, mem_we, mem_rvalid; logic [31:0] mem_addr; logic [63:0] mem_wdata, mem_rdata; logic [7:0] mem_strb;
 
+  localparam int AXIS_W = 192; // 185 bits payload + 7 pad
+
   axi_to_mem #(
     .axi_req_t (axi_req_t),
     .axi_resp_t(axi_resp_t),
     .AddrWidth (AXI_ADDR_W),
     .DataWidth (AXI_DATA_W),
     .IdWidth   (AXI_ID_W),
-    .NumBanks  (1)             // single bank -> simple SRAM
+    .NumBanks  (1),            // single bank -> simple SRAM
+    .BufDepth( (AXIS_W+AXI_DATA_W-1)/AXI_DATA_W )
   ) u_axi2mem (
     .clk_i      (clk),
     .rst_ni     (rstn),
@@ -635,7 +777,6 @@ module soc_option_a_pulp_top_real_duplex (
 
 
   // ---------------- CGRA bridge (packet pack/unpack) + CGRA instantiation ----------------
-  localparam int AXIS_W = 192; // 185 bits payload + 7 pad
   logic [AXIS_W-1:0] to_cgra_tdata; logic to_cgra_tvalid, to_cgra_tready;
   logic [AXIS_W-1:0] from_cgra_tdata; logic from_cgra_tvalid, from_cgra_tready;
 
@@ -655,7 +796,8 @@ module soc_option_a_pulp_top_real_duplex (
   );
 
   // CGRA instance wired to the bridge
-  MeshMultiCgraRTL__3077cc8233e37d0f u_cgra (
+  //MeshMultiCgraRTL__3077cc8233e37d0f u_cgra (
+  MeshMultiCgraRTL__fifo u_cgra (
     .clk                    (clk),
     .reset                  (~rstn),
     .recv_from_cpu_pkt__msg (recv_msg),

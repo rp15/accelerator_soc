@@ -231,7 +231,7 @@ module dp_sram_axi_cpu #(
   // ---------------- CPU read: purely combinational ----------------
   assign cpu_rdata = mem[cpu_addr_aligned];
   assign mem_rdata = mem[mem_addr_aligned];
-  assign mem_rvalid = mem_req & ~mem_we;
+  assign mem_rvalid = mem_req; //& ~mem_we; // rvalid is expected for both reads AND WRITES. Won't get bvalid out of axi_to_mem otherwise.
   assign mem_gnt    = mem_req & ~cpu_we;
   // ---------------- Unified writer + AXI read model ----------------
   // One always_ff drives: mem_gnt, mem_rvalid, mem_rdata, and *all* writes to mem
@@ -358,11 +358,11 @@ module axis_dma_duplex #(
           rx_addr      <= src_addr_rx[AXI_ADDR_W-1:0];
           rx_st        <= RX_AR;
           req_q.r_ready <= 1'b0;
-          req_q.ar_valid <= 1'b1; req_q.ar.addr <= src_addr_rx[AXI_ADDR_W-1:0]; req_q.ar.len <= 'd2; req_q.ar.burst <= 'd1; req_q.ar.size <= 'd3;
+          req_q.ar_valid <= 1'b1; req_q.ar.addr <= src_addr_rx[AXI_ADDR_W-1:0]; req_q.ar.len <= BEATS_PER_PKT-1; req_q.ar.burst <= 'd1; req_q.ar.size <= $clog2(AXI_DATA_W/8);
         end
         RX_AR: begin
           // drive AR until accepted
-          req_q.ar_valid <= 1'b1; req_q.ar.addr <= rx_addr; req_q.ar.len <= 'd2; req_q.ar.burst <= 'd1; req_q.ar.size <= 'd3;
+          req_q.ar_valid <= 1'b1; req_q.ar.addr <= rx_addr; req_q.ar.len <= BEATS_PER_PKT-1; req_q.ar.burst <= 'd1; req_q.ar.size <= $clog2(AXI_DATA_W/8);
           if (axi_i.ar_ready) begin
             req_q.ar_valid <= 1'b0;
             rx_beat_cnt <= '0;
@@ -386,7 +386,7 @@ module axis_dma_duplex #(
                   rx_addr      <= rx_addr + BEATS_PER_PKT*(AXI_DATA_W/8);
                   rx_st        <= RX_AR;
                   req_q.r_ready <= 1'b0;
-                  req_q.ar_valid <= 1'b1; req_q.ar.addr <= rx_addr + BEATS_PER_PKT*(AXI_DATA_W/8); req_q.ar.len <= 'd2; req_q.ar.burst <= 'd1; req_q.ar.size <= 'd3;
+                  req_q.ar_valid <= 1'b1; req_q.ar.addr <= rx_addr + BEATS_PER_PKT*(AXI_DATA_W/8); req_q.ar.len <= BEATS_PER_PKT-1; req_q.ar.burst <= 'd1; req_q.ar.size <= $clog2(AXI_DATA_W/8);
                 end else begin
                   rx_st <= RX_DONE;
                   req_q.r_ready <= 1'b0;
@@ -405,6 +405,7 @@ module axis_dma_duplex #(
   // Present packet to AXIS sink (CGRA) when a full packet is buffered
   assign s_axis_tdata[(BEATS_PER_PKT-1)*AXI_DATA_W +: AXI_DATA_W] = axi_i.r.data;
   assign s_axis_tdata[0 +: (BEATS_PER_PKT-1)*AXI_DATA_W]          = rx_shift[0 +: (BEATS_PER_PKT-1)*AXI_DATA_W];
+  //assign s_axis_tdata = axi_i.r.data; TODO resilient fix for singe beat per packet.
   assign s_axis_tvalid = (rx_st == RX_R) && (rx_beat_cnt == BEATS_PER_PKT-1) && axi_i.r_valid;
 
   // ---------------------------------------------------------------------------
@@ -439,12 +440,12 @@ module axis_dma_duplex #(
           if (m_axis_tvalid) begin
             tx_buf <= m_axis_tdata;
             tx_st  <= TX_AW;
-            //req_q.aw_valid <= 1'b1; req_q.aw.addr <= tx_addr; req_q.aw.len <= 'd2; req_q.aw.burst <= 'd1; req_q.aw.size <= 'd3;
+            //req_q.aw_valid <= 1'b1; req_q.aw.addr <= tx_addr; req_q.aw.len <= BEATS_PER_PKT-1; req_q.aw.burst <= 'd1; req_q.aw.size <= $clog2(AXI_DATA_W/8);
             //req_q.w_valid <= 1'b1; req_q.w.data <= tx_buf[tx_beat_cnt*AXI_DATA_W +: AXI_DATA_W]; req_q.w.strb <= {8{1'b1}}; req_q.w.last <= (tx_beat_cnt == BEATS_PER_PKT-1);
           end
         end
         TX_AW: begin
-          req_q.aw_valid <= 1'b1; req_q.aw.addr <= tx_addr; req_q.aw.len <= 'd2; req_q.aw.burst <= 'd1; req_q.aw.size <= 'd3;
+          req_q.aw_valid <= 1'b1; req_q.aw.addr <= tx_addr; req_q.aw.len <= BEATS_PER_PKT-1; req_q.aw.burst <= 'd1; req_q.aw.size <= $clog2(AXI_DATA_W/8);
           req_q.w_valid <= 1'b1; req_q.w.data <= tx_buf[tx_beat_cnt*AXI_DATA_W +: AXI_DATA_W]; req_q.w.strb <= {8{1'b1}}; req_q.w.last <= (tx_beat_cnt == BEATS_PER_PKT-1);
           req_q.b_ready <= 1'b1;
           if (axi_i.aw_ready && (tx_beat_cnt != BEATS_PER_PKT-1) ) begin // 1 != BEATS_PER_PKT
@@ -452,19 +453,29 @@ module axis_dma_duplex #(
             tx_beat_cnt <= 'b1;
             tx_st <= TX_W;
             req_q.w_valid <= 1'b1; req_q.w.data <= tx_buf[1*AXI_DATA_W +: AXI_DATA_W]; req_q.w.strb <= {8{1'b1}}; req_q.w.last <= (1 == BEATS_PER_PKT-1);
-          end else if (axi_i.aw_ready && (tx_beat_cnt == BEATS_PER_PKT-1) ) begin // 1 == BEATS_PER_PKT
+          end else if (axi_i.aw_ready && (tx_beat_cnt == BEATS_PER_PKT-1) && ~axi_i.b_valid) begin // 1 == BEATS_PER_PKT
             tx_st <= TX_B;
+            req_q.w_valid <= 1'b0;
+            req_q.aw_valid <= 1'b0;
+          end else if (axi_i.aw_ready && (tx_beat_cnt == BEATS_PER_PKT-1) && axi_i.b_valid) begin // 1 == BEATS_PER_PKT
+            tx_st <= TX_DONE;
+            req_q.w_valid <= 1'b0;
+            req_q.aw_valid <= 1'b0;
           end
         end
         TX_W: begin
-          //req_q.aw_valid <= 1'b1; req_q.aw.addr <= tx_addr; req_q.aw.len <= 'd2; req_q.aw.burst <= 'd1; req_q.aw.size <= 'd3;
+          //req_q.aw_valid <= 1'b1; req_q.aw.addr <= tx_addr; req_q.aw.len <= BEATS_PER_PKT-1; req_q.aw.burst <= 'd1; req_q.aw.size <= $clog2(AXI_DATA_W/8);
           // drive each 64-bit chunk sequentially
           req_q.w_valid <= 1'b1; req_q.w.data <= tx_buf[tx_beat_cnt*AXI_DATA_W +: AXI_DATA_W]; req_q.w.strb <= {8{1'b1}}; req_q.w.last  <= (tx_beat_cnt == BEATS_PER_PKT-1);
           req_q.b_ready <= 1'b1;
           if (axi_i.w_ready) begin
-            if (tx_beat_cnt == BEATS_PER_PKT-1) begin
+            if ( (tx_beat_cnt == BEATS_PER_PKT-1) && ~axi_i.b_valid ) begin
               req_q.b_ready <= 1'b1;
               tx_st <= TX_B;
+              req_q.w_valid <= 1'b0;
+            end else if ( (tx_beat_cnt == BEATS_PER_PKT-1) && axi_i.b_valid ) begin
+              //req_q.b_ready <= 1'b1;
+              tx_st <= TX_DONE;
               req_q.w_valid <= 1'b0;
             end else begin
               tx_beat_cnt <= tx_beat_cnt + 1'b1;
@@ -475,6 +486,7 @@ module axis_dma_duplex #(
         TX_B: begin
           if (axi_i.b_valid) begin
             // Next packet or done
+            req_q.b_ready <= 1'b0;
             if (tx_pkts_left > 1) begin
               tx_pkts_left <= tx_pkts_left - 1;
               tx_addr      <= tx_addr + BEATS_PER_PKT*(AXI_DATA_W/8);

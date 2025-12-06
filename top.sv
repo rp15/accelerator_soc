@@ -235,7 +235,9 @@ module dp_sram_axi_cpu #(
   assign cpu_rdata = mem[cpu_addr_aligned];
   assign mem_rdata = mem[mem_addr_aligned];
   assign mem_rvalid = mem_req; //& ~mem_we; // rvalid is expected for both reads AND WRITES. Won't get bvalid out of axi_to_mem otherwise.
+  // TODO: mem_rvalid =? mem_req & ( ~mem_we | (mem_we & ~cpu_we) )
   assign mem_gnt    = mem_req & ~cpu_we;
+  // TODO: what is mem_gnt really? "..., request can be granted by this bank"?
   // ---------------- Unified writer + AXI read model ----------------
   // One always_ff drives: mem_gnt, mem_rvalid, mem_rdata, and *all* writes to mem
   always_ff @(posedge clk or negedge rstn) begin

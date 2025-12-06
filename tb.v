@@ -179,6 +179,7 @@ module tb
     for (int b=0;b<32;b++)
       $display("%02x", dut.rf[b]);
 
+    $display("TO CGRA");
     $display("SRAM[0x1000..0x1007]:");
     $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_1000 >> 3]);
     $display("SRAM[0x1008..0x100f]:");
@@ -208,14 +209,34 @@ module tb
     $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_1058 >> 3]);
 
 
+    $display("FROM CGRA");
     $display("SRAM[0x2000..]:");
     $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_2000 >> 3]);
     $display("SRAM[0x2008..]:");
     $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_2008 >> 3]);
     $display("SRAM[0x2010..]:");
     $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_2010 >> 3]);
+
     $display("SRAM[0x2018..]:");
     $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_2018 >> 3]);
+    $display("SRAM[0x2020..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_2020 >> 3]);
+    $display("SRAM[0x2028..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_2028 >> 3]);
+
+    $display("SRAM[0x2030..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_2030 >> 3]);
+    $display("SRAM[0x2038..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_2038 >> 3]);
+    $display("SRAM[0x2040..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_2040 >> 3]);
+
+    $display("SRAM[0x2048..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_2048 >> 3]);
+    $display("SRAM[0x2050..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_2050 >> 3]);
+    $display("SRAM[0x2058..]:");
+    $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_2058 >> 3]);
 
 
     $display("MMIO:");

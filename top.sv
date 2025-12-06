@@ -445,6 +445,7 @@ module axis_dma_duplex #(
           if (m_axis_tvalid) begin
             tx_buf <= m_axis_tdata;
             tx_st  <= TX_AW;
+            tx_beat_cnt <= '0;
             //req_q.aw_valid <= 1'b1; req_q.aw.addr <= tx_addr; req_q.aw.len <= BEATS_PER_PKT-1; req_q.aw.burst <= 'd1; req_q.aw.size <= $clog2(AXI_DATA_W/8);
             //req_q.w_valid <= 1'b1; req_q.w.data <= tx_buf[tx_beat_cnt*AXI_DATA_W +: AXI_DATA_W]; req_q.w.strb <= {8{1'b1}}; req_q.w.last <= (tx_beat_cnt == BEATS_PER_PKT-1);
           end

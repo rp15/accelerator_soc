@@ -348,7 +348,15 @@ module axis_dma_duplex #(
   logic [1:0] rx_beat_cnt; logic [AXIS_W-1:0] rx_shift;
 
   assign busy_rx = (rx_st != RX_IDLE) && (rx_st != RX_DONE);
-  assign done_rx = (rx_st == RX_DONE);
+  //assign done_rx = (rx_st == RX_DONE);
+  logic done_rx_nxt;
+  assign done_rx_nxt = start_rx ? 'b0 : ( (rx_st == RX_DONE) ? 'b1 : done_rx );
+  always_ff @(posedge clk or negedge rstn) begin
+    if (!rstn)
+      done_rx <= 'b0;
+    else
+      done_rx <= done_rx_nxt;
+  end
 
   always_ff @(posedge clk or negedge rstn) begin
     if (!rstn) begin
@@ -429,7 +437,15 @@ module axis_dma_duplex #(
   logic [1:0] tx_beat_cnt; logic [AXIS_W-1:0] tx_buf;
 
   assign busy_tx = (tx_st != TX_IDLE) && (tx_st != TX_DONE);
-  assign done_tx = (tx_st == TX_DONE);
+  //assign done_tx = (tx_st == TX_DONE);
+  logic done_tx_nxt;
+  assign done_tx_nxt = start_tx ? 'b0 : ( (tx_st == TX_DONE) ? 'b1 : done_tx );
+  always_ff @(posedge clk or negedge rstn) begin
+    if (!rstn)
+      done_tx <= 'b0;
+    else
+      done_tx <= done_tx_nxt;
+  end
 
   // Always ready to accept a packet when in CAPTURE
   assign m_axis_tready = (tx_st == TX_CAPTURE);

@@ -463,9 +463,16 @@ module axis_dma_duplex #(
             req_q.w_valid <= 1'b0;
             req_q.aw_valid <= 1'b0;
           end else if (axi_i.aw_ready && (tx_beat_cnt == BEATS_PER_PKT-1) && axi_i.b_valid) begin // 1 == BEATS_PER_PKT
-            tx_st <= TX_DONE;
+            //tx_st <= TX_DONE;
             req_q.w_valid <= 1'b0;
             req_q.aw_valid <= 1'b0;
+            if (tx_pkts_left > 1) begin
+              tx_pkts_left <= tx_pkts_left - 1;
+              tx_addr      <= tx_addr + BEATS_PER_PKT*(AXI_DATA_W/8);
+              tx_st        <= TX_CAPTURE;
+            end else begin
+              tx_st <= TX_DONE;
+            end
           end
         end
         TX_W: begin
@@ -480,8 +487,15 @@ module axis_dma_duplex #(
               req_q.w_valid <= 1'b0;
             end else if ( (tx_beat_cnt == BEATS_PER_PKT-1) && axi_i.b_valid ) begin
               //req_q.b_ready <= 1'b1;
-              tx_st <= TX_DONE;
+              //tx_st <= TX_DONE;
               req_q.w_valid <= 1'b0;
+              if (tx_pkts_left > 1) begin
+                tx_pkts_left <= tx_pkts_left - 1;
+                tx_addr      <= tx_addr + BEATS_PER_PKT*(AXI_DATA_W/8);
+                tx_st        <= TX_CAPTURE;
+              end else begin
+                tx_st <= TX_DONE;
+              end
             end else begin
               tx_beat_cnt <= tx_beat_cnt + 1'b1;
               req_q.w_valid <= 1'b1; req_q.w.data <= tx_buf[(tx_beat_cnt+1'b1)*AXI_DATA_W +: AXI_DATA_W]; req_q.w.strb <= {8{1'b1}}; req_q.w.last  <= ((tx_beat_cnt+1'b1) == BEATS_PER_PKT-1);

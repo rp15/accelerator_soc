@@ -130,6 +130,9 @@ endfunction
   localparam int AXI_DATA_W = 64;
   localparam int AXI_ID_W   = 4;
   localparam int AXI_USER_W = 1;
+  localparam int BEATS_PER_PKT = (CGRA_PKT_W + AXI_DATA_W - 1) / AXI_DATA_W;
+  //localparam int BEATS_PER_PKT = 2;
+
 typedef logic [AXI_ADDR_W-1:0] td0;
 typedef logic [AXI_DATA_W-1:0] td1;
 typedef logic [AXI_ID_W-1:0] td2;
@@ -286,7 +289,8 @@ module axis_dma_duplex #(
   parameter int AXI_ADDR_W = 32,
   parameter int AXI_DATA_W = 64,
   parameter int AXI_ID_W   = 4,
-  parameter int AXIS_W     = 192
+  parameter int AXIS_W     = 192,
+  parameter int BEATS_PER_PKT = (AXIS_W+AXI_DATA_W-1)/AXI_DATA_W // 192/64=3
 )(
   input  logic clk,
   input  logic rstn,
@@ -318,7 +322,6 @@ module axis_dma_duplex #(
   input  logic              m_axis_tvalid,
   output logic              m_axis_tready
 );
-  localparam int BEATS_PER_PKT = (AXIS_W+AXI_DATA_W-1)/AXI_DATA_W; // 192/64=3
 
   // ---------------------------------------------------------------------------
   // AXI req defaulting
@@ -739,7 +742,8 @@ module soc_option_a_pulp_top_real_duplex (
   axi_req_t  dma_axi_req; axi_resp_t dma_axi_rsp;
   logic       mem_req, mem_gnt, mem_we, mem_rvalid; logic [31:0] mem_addr; logic [63:0] mem_wdata, mem_rdata; logic [7:0] mem_strb;
 
-  localparam int AXIS_W = 192; // 185 bits payload + 7 pad
+  //localparam int AXIS_W = 192; // 185 bits payload + 7 pad to get to a multiple of 64
+  localparam int AXIS_W = AXI_DATA_W * ( (CGRA_PKT_W + AXI_DATA_W - 1) / AXI_DATA_W ) ; // 185 bits payload + 7 pad to get to a multiple of 64
 
   axi_to_mem #(
     .axi_req_t (axi_req_t),
@@ -748,7 +752,7 @@ module soc_option_a_pulp_top_real_duplex (
     .DataWidth (AXI_DATA_W),
     .IdWidth   (AXI_ID_W),
     .NumBanks  (1),            // single bank -> simple SRAM
-    .BufDepth( (AXIS_W+AXI_DATA_W-1)/AXI_DATA_W )
+    .BufDepth  (BEATS_PER_PKT)
   ) u_axi2mem (
     .clk_i      (clk),
     .rst_ni     (rstn),
@@ -822,7 +826,7 @@ module soc_option_a_pulp_top_real_duplex (
 
   // ---------------- Duplex DMA instance ----------------
   axis_dma_duplex #(
-    .AXI_ADDR_W(AXI_ADDR_W), .AXI_DATA_W(AXI_DATA_W), .AXI_ID_W(AXI_ID_W), .AXIS_W(AXIS_W)
+    .AXI_ADDR_W(AXI_ADDR_W), .AXI_DATA_W(AXI_DATA_W), .AXI_ID_W(AXI_ID_W), .AXIS_W(AXIS_W), .BEATS_PER_PKT(BEATS_PER_PKT)
   ) u_dma (
     .clk(clk), .rstn(rstn),
     .start_rx     (reg_start_rx),

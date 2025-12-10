@@ -53,10 +53,10 @@
 0032bc23 SD x3, 24(x5) - LEN_RX
 0032be23 SD x3, 28(x5) - LEN_TX
 00300313 x6 = 3
-0062b023 SD x6, 0(x5) - CONTROL (start_rx|start_tx)
-0202b383 LD x7, 32(x5) - STATUS
-00a3f393 ANDI x7, x7, 0x0A 
-00a00413 ADDI x8, x0, 10
+0062b023 SD x6, 0(x5) - CONTROL (start_tx, start_rx) - this instruction starts the transmissions from DMEM to CGRA and reception from CGRA to DMEM. The while loop will keep polling until status shows done.
+poll: 0202b383 LD x7, 32(x5) - STATUS (stat_done_tx, stat_busy_tx, stat_done_rx, stat_busy_rx) - d10 == hA means all done.
+00a3f393 ANDI x7, x7, 0x0A
+00a00413 ADDI x8, x0, 0x0A
 fe839ae3 BNE x7, x8, poll
 0000006f JAL x0, 0
 

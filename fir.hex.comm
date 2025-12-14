@@ -1,0 +1,52 @@
+000010b7 x1 = 0x0000_1000 (SRC)
+00002137 x2 = 0x0000_2000 (DST)
+400002b7 x5 = 0x4000_0000 (MMIO base)
+04900193 x3 = 73 (N = 73 CGRA packets. 3 beats per packet for 64b AXI bandwidth. CGRA packets set from here, beats per packet set by parameters.)
+01800213 x4 = 24 (packet stride)
+...
+111103b7 lui x7
+0013e393 ORI x7
+01039393 slli x7, x7, 16
+01039393 slli x7, x7, 16
+addi x31 x0 x0
+lui 31
+ori 31
+OR 7 7 31
+0070b023 sd x7, 0(x1)
+
+22220437 lui x8
+ori x8
+01041413 slli x8, x8, 16
+01041413 slli x8, x8, 16
+addi x31 x0 x0
+lui 31
+ori 31
+OR 8 8 31
+0080b423 sd x8, 8(x1)
+
+33330537 lui x10
+ORI x10
+01051513 slli x10, x10, 16
+01051513 slli x10, x10, 16
+addi x31 x0 x0
+lui 31
+ori 31
+OR 10 10 31
+00a0b823 sd x10, 16(x1)
+
+01808093 Advance x1 += 24 (h1018)
+...
+000010b7 x1 = 0x0000_1000 (SRC)
+0012b423 SD x1, 8(x5) - SRC_RX
+0022b823 SD x2, 16(x5) - DST_TX
+0032bc23 SD x3, 24(x5) - LEN_RX
+00100193 x3 = 1 (N = 1 CGRA packet. 3 beats per packet for 64b AXI bandwidth. CGRA packets set from here, beats per packet set by parameters.)
+0032be23 SD x3, 28(x5) - LEN_TX
+00300313 x6 = 3
+00a00413 ADDI x8, x0, 0x0A
+0062b023 SD x6, 0(x5) - CONTROL (start_tx, start_rx) - this instruction starts the transmissions from DMEM to CGRA and reception from CGRA to DMEM. The while loop will keep polling until status shows done.
+poll: 0202b383 LD x7, 32(x5) - STATUS (stat_done_tx, stat_busy_tx, stat_done_rx, stat_busy_rx) - d10 == hA means all done.
+00a3f393 ANDI x7, x7, 0x0A
+fe839ce3 BNE x7, x8, poll
+0000006f JAL x0, 0
+

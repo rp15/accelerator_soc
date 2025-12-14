@@ -273,13 +273,13 @@ endmodule
 // -----------------------------------------------------------------------------
 // IMEM ROM (32b words, addressed by PC[31:2])
 // -----------------------------------------------------------------------------
-module imem_rom #(parameter int DEPTH = 1024) (
+module imem_rom #(parameter int DEPTH = 4096) (
   input  logic [31:0] pc,
   output logic [31:0] inst
 );
   logic [31:0] mem [0:DEPTH-1];
   //initial for (int i=0;i<DEPTH;i++) mem[i] = 32'h00000013; // ADDI x0,x0,0
-  initial $readmemh("prog.hex", mem);
+  initial $readmemh("fir.hex", mem);
   assign inst = mem[pc[31:2]];
 endmodule
 
@@ -853,8 +853,8 @@ module soc_option_a_pulp_top_real_duplex (
   );
 
   // CGRA instance wired to the bridge
-  //MeshMultiCgraRTL__3077cc8233e37d0f u_cgra (
-  MeshMultiCgraRTL__fifo u_cgra (
+  MeshMultiCgraRTL__3077cc8233e37d0f u_cgra (
+  //MeshMultiCgraRTL__fifo u_cgra (
     .clk                    (clk),
     .reset                  (~rstn),
     .recv_from_cpu_pkt__msg (recv_msg),

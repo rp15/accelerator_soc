@@ -1,7 +1,7 @@
 000010b7 x1 = 0x0000_1000 (SRC)
 00002137 x2 = 0x0000_2000 (DST)
 400002b7 x5 = 0x4000_0000 (MMIO base)
-00300193 x3 = 3 (N = 3 CGRA packets. 3 beats per packet for 64b AXI bandwidth. Different values both set to 3.)
+00300193 x3 = 3 (N = 3 CGRA packets. 3 beats per packet for 64b AXI bandwidth. CGRA packets set from here, beats per packet set by parameters.)
 01800213 x4 = 24 (packet stride)
 111103b7 lui x7
 01039393 slli x7, x7, 16

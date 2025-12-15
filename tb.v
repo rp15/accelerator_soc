@@ -156,7 +156,7 @@ module tb
     if (errors == 0) $display("[PASS] %0d packets moved mem->CGRA->mem correctly", N_PKTS);
     else             $display("[FAIL] %0d errors", errors);
 */
-    repeat (4500) @(posedge clk);
+    repeat (2500) @(posedge clk);
 
     // Inspect the first few destination packets.
     for (int i=0;i<3;i++) begin

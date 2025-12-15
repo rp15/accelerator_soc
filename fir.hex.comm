@@ -8,7 +8,6 @@
 addi x7
 01039393 slli x7, x7, 16
 01039393 slli x7, x7, 16
-addi x31 x0 x0
 lui 31
 addi 31
 add 7 7 31
@@ -18,7 +17,6 @@ add 7 7 31
 addi x8
 01041413 slli x8, x8, 16
 01041413 slli x8, x8, 16
-addi x31 x0 x0
 lui 31
 addi 31
 add 8 8 31
@@ -28,7 +26,6 @@ add 8 8 31
 addI x10
 01051513 slli x10, x10, 16
 01051513 slli x10, x10, 16
-addi x31 x0 x0
 lui 31
 addi 31
 add 10 10 31

@@ -4,7 +4,7 @@ vcs -sverilog -full64 -timescale=1ns/1ps erv_RISC-V/ALUCtrl.v erv_RISC-V/dff.v e
                                          common_cells/src/stream_mux.sv common_cells/src/stream_fork.sv common_cells/src/stream_fifo.sv \
                                          common_cells/src/stream_join.sv common_cells/src/stream_fork_dynamic.sv common_cells/src/fifo_v3.sv common_cells/src/stream_join_dynamic.sv \
                                          axi/src/axi_pkg.sv axi/src/axi_intf.sv axi/src/axi_to_detailed_mem.sv axi/src/axi_to_mem.sv \
-                                         VectorCGRAfork0/multi_cgra/test/MeshMultiCgraRTL__3077cc8233e37d0f__pickled.v \
+                                         VectorCGRA/multi_cgra/test/MeshMultiCgraRTL__91e52c2411846c5f__pickled.v \
                                          src/imem_rom.sv src/dp_sram_axi_cpu.sv src/cgra_axis_bridge.sv src/axis_dma_duplex.sv src/acc_soc.sv verif/acc_soc_tb.sv \
                                          -debug_access+all +incdir+common_cells/include +incdir+axi/include +incdir+erv_RISC-V -top acc_soc_tb
 */
@@ -313,7 +313,7 @@ module acc_soc_tb
   begin
     $fsdbDumpfile("./output.fsdb");
     //$fsdbDumpvars (0, "cgra_test.MultiCGRA.cgra__0.tile__5.send_data__msg");
-    $fsdbDumpvars ("+all", "tb");
+    $fsdbDumpvars ("+all", "acc_soc_tb");
     $fsdbDumpMDA;
     $fsdbDumpSVA;
   end

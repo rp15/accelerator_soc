@@ -145,6 +145,7 @@ module axis_dma_duplex #(
           end
         end
         RX_DONE: rx_st <= RX_IDLE;
+        default: rx_st <= RX_IDLE;
       endcase
     end
   end
@@ -275,6 +276,7 @@ module axis_dma_duplex #(
           end
         end
         TX_DONE: tx_st <= TX_IDLE;
+        default: tx_st <= TX_IDLE;
       endcase
     end
   end

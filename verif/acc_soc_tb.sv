@@ -1,32 +1,29 @@
 `timescale 1ps/1ps
-
-//`include "header.sv"
-
 /*
 vcs -sverilog -full64 -timescale=1ns/1ps erv_RISC-V/ALUCtrl.v erv_RISC-V/dff.v erv_RISC-V/immGen.v erv_RISC-V/mainCtrl.v erv_RISC-V/risc5ALU_core.v erv_RISC-V/riscV.v \
                                          common_cells/src/stream_mux.sv common_cells/src/stream_fork.sv common_cells/src/stream_fifo.sv \
                                          common_cells/src/stream_join.sv common_cells/src/stream_fork_dynamic.sv common_cells/src/fifo_v3.sv common_cells/src/stream_join_dynamic.sv \
                                          axi/src/axi_pkg.sv axi/src/axi_intf.sv axi/src/axi_to_detailed_mem.sv axi/src/axi_to_mem.sv \
-                                         VectorCGRAfork0/multi_cgra/test/MeshMultiCgraRTL__3077cc8233e37d0f__pickled.v top.sv tb.v \
-                                         -debug_access+all +incdir+common_cells/include +incdir+axi/include +incdir+erv_RISC-V -top tb
+                                         VectorCGRA/multi_cgra/test/MeshMultiCgraRTL__91e52c2411846c5f__pickled.v \
+                                         src/imem_rom.sv src/dp_sram_axi_cpu.sv src/cgra_axis_bridge.sv src/axis_dma_duplex.sv src/acc_soc.sv verif/acc_soc_tb.sv \
+                                         -debug_access+all +incdir+common_cells/include +incdir+axi/include +incdir+erv_RISC-V -top acc_soc_tb
 */
 
-module tb
+module acc_soc_tb
 (
 );
 
   logic [0:0] clk;
   logic [0:0] reset;
 
-  soc_option_a_pulp_top_real_duplex dut ( .clk, .rstn(~reset) );
+  acc_soc dut ( .clk, .rstn(~reset) );
+
 
   localparam int N_PKTS   = 3;
   localparam longint SRC  = 64'h0000_0000_0000_1000; // must be inside SRAM range
   localparam longint DST  = 64'h0000_0000_0000_2000;
 
-
   int errors = 0;
-
 
   // Build a simple packet pattern
   function automatic IntraCgraPacket_4_2x2_16_8_2_CgraPayload__432fde8bfb7da0ed mk_pkt(int idx);
@@ -104,7 +101,6 @@ module tb
   endfunction
 
 
-
   initial
   begin
     // Static assertions
@@ -179,7 +175,7 @@ module tb
     for (int b=0;b<32;b++)
       $display("%02x", dut.rf[b]);
 
-    $display("TO CGRA");
+    $display("\nTO CGRA");
     $display("SRAM[0x1000..0x1007]:");
     $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_1000 >> 3]);
     $display("SRAM[0x1008..0x100f]:");
@@ -209,7 +205,7 @@ module tb
     $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_1058 >> 3]);
 
 
-    $display("FROM CGRA");
+    $display("\nFROM CGRA");
     $display("SRAM[0x2000..]:");
     $display("%02x", dut.u_sram.mem[64'h0000_0000_0000_2000 >> 3]);
     $display("SRAM[0x2008..]:");
@@ -317,7 +313,7 @@ module tb
   begin
     $fsdbDumpfile("./output.fsdb");
     //$fsdbDumpvars (0, "cgra_test.MultiCGRA.cgra__0.tile__5.send_data__msg");
-    $fsdbDumpvars ("+all", "tb");
+    $fsdbDumpvars ("+all", "acc_soc_tb");
     $fsdbDumpMDA;
     $fsdbDumpSVA;
   end

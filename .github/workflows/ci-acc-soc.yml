@@ -88,7 +88,6 @@ jobs:
         export PYTHONPATH=$PYTHONPATH:.
         pytest ../VectorCGRA/multi_cgra/test/MeshMultiCgraRTL_test.py::test_multi_CGRA_fir_scalar_translation --collect-only --tb=short
         pytest ../VectorCGRA/multi_cgra/test/MeshMultiCgraRTL_test.py --collect-only --tb=short
-        pytest ../VectorCGRA --collect-only
         ## Simulation across all tests.
         #pytest .. -v --tb=short
         ## CtrlMemDynamicRTL

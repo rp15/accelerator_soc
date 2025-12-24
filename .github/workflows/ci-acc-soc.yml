@@ -86,6 +86,7 @@ jobs:
         mkdir -p build && cd build
         source ${HOME}/venv/bin/activate
         export PYTHONPATH=$PYTHONPATH:.
+        pytest ../VectorCGRA --collect-only
         ## Simulation across all tests.
         #pytest .. -v --tb=short
         ## CtrlMemDynamicRTL

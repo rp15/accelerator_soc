@@ -309,6 +309,7 @@ module acc_soc_tb
     $dumpfile("./output.vcd");
     $dumpvars (0, cgra_test);
   end*/
+`ifndef VERILATOR
   initial
   begin
     $fsdbDumpfile("./output.fsdb");
@@ -317,6 +318,7 @@ module acc_soc_tb
     $fsdbDumpMDA;
     $fsdbDumpSVA;
   end
+`endif
 
 
 endmodule

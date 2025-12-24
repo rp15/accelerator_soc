@@ -50,9 +50,9 @@ jobs:
         source ${HOME}/venv/bin/activate
         pip install py==1.11.0
         pip install wheel
-        #pip install -U git+https://github.com/tancheng/pymtl3.1@yo-struct-list-fix
-        #pip install hypothesis
-        #pip install pytest
+        pip install -U git+https://github.com/tancheng/pymtl3.1@yo-struct-list-fix
+        pip install hypothesis
+        pip install pytest
         pip install py-markdown-table
         pip install PyYAML
         pip list
@@ -81,10 +81,10 @@ jobs:
     #    cd mflowgen
     #    pip install -e .
 
-    #- name: Test and translate with pytest
-    #  run: |
-    #    mkdir -p build && cd build
-        #source ${HOME}/venv/bin/activate
+    - name: Test and translate with pytest
+      run: |
+        mkdir -p build && cd build
+        source ${HOME}/venv/bin/activate
         ## Simulation across all tests.
         #pytest .. -v --tb=short
         ## CtrlMemDynamicRTL
@@ -111,8 +111,8 @@ jobs:
         #pytest ../mem/data/test/DataMemControllerRTL_test.py -xvs --test-verilog --dump-vtb --dump-vcd
         ## MeshMultiCgraTemplateRTL Test
         #pytest ../multi_cgra/test/MeshMultiCgraTemplateRTL_test.py -xvs --test-verilog --dump-vtb --dump-vcd
-        ## Generate .v file with explicit file & module names.
-        #pytest ../multi_cgra/test/MeshMultiCgraRTL_test.py::test_multi_CGRA_fir_scalar_translation -xvs --test-verilog --dump-vtb --dump-vcd
+        # Generate .v file with explicit file & module names.
+        pytest ../multi_cgra/test/MeshMultiCgraRTL_test.py::test_multi_CGRA_fir_scalar_translation -xvs --test-verilog --dump-vtb --dump-vcd
 
     #- name: Test synthesis for CGRA template
     #  run: |
@@ -147,6 +147,6 @@ jobs:
         unset PYMTL_VERILATOR_INCLUDE_DIR
         mkdir -p build && cd build
         verilator --version
-        verilator --binary -j 0 -Wno-UNOPTFLAT -Wno-WIDTHEXPAND -Wno-TIMESCALEMOD --error-limit 1000 --trace --timing -I../common_cells/include -I../axi/include -I../erv_RISC-V --top acc_soc_tb ../erv_RISC-V/ALUCtrl.v ../erv_RISC-V/dff.v ../erv_RISC-V/immGen.v ../erv_RISC-V/mainCtrl.v ../erv_RISC-V/risc5ALU_core.v ../erv_RISC-V/riscV.v ../common_cells/src/stream_mux.sv ../common_cells/src/stream_fork.sv ../common_cells/src/stream_fifo.sv ../common_cells/src/stream_join.sv ../common_cells/src/stream_fork_dynamic.sv ../common_cells/src/fifo_v3.sv ../common_cells/src/stream_join_dynamic.sv ../axi/src/axi_pkg.sv ../axi/src/axi_intf.sv ../axi/src/axi_to_detailed_mem.sv ../axi/src/axi_to_mem.sv ../VectorCGRA/multi_cgra/test/MeshMultiCgraRTL__explicit__pickled.v ../src/imem_rom.sv ../src/dp_sram_axi_cpu.sv ../src/cgra_axis_bridge.sv ../src/axis_dma_duplex.sv ../src/acc_soc.sv ../verif/acc_soc_tb.sv
+        verilator --binary -j 0 -Wno-UNOPTFLAT -Wno-WIDTHEXPAND -Wno-TIMESCALEMOD --error-limit 1000 --trace --timing -I../common_cells/include -I../axi/include -I../erv_RISC-V --top acc_soc_tb ../erv_RISC-V/ALUCtrl.v ../erv_RISC-V/dff.v ../erv_RISC-V/immGen.v ../erv_RISC-V/mainCtrl.v ../erv_RISC-V/risc5ALU_core.v ../erv_RISC-V/riscV.v ../common_cells/src/stream_mux.sv ../common_cells/src/stream_fork.sv ../common_cells/src/stream_fifo.sv ../common_cells/src/stream_join.sv ../common_cells/src/stream_fork_dynamic.sv ../common_cells/src/fifo_v3.sv ../common_cells/src/stream_join_dynamic.sv ../axi/src/axi_pkg.sv ../axi/src/axi_intf.sv ../axi/src/axi_to_detailed_mem.sv ../axi/src/axi_to_mem.sv ./MeshMultiCgraRTL__explicit__pickled.v ../src/imem_rom.sv ../src/dp_sram_axi_cpu.sv ../src/cgra_axis_bridge.sv ../src/axis_dma_duplex.sv ../src/acc_soc.sv ../verif/acc_soc_tb.sv
         ./obj_dir/Vacc_soc_tb
 

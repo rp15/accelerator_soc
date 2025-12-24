@@ -301,7 +301,7 @@ module acc_soc (
   );
 
   // ---------------- CGRA instance wired to the bridge ----------------
-  MeshMultiCgraRTL__91e52c2411846c5f u_cgra (
+  MeshMultiCgraRTL__explicit u_cgra (
     .clk                    (clk),
     .reset                  (~rstn),
     .recv_from_cpu_pkt__msg (recv_msg),

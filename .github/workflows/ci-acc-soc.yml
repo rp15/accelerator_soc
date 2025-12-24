@@ -85,6 +85,7 @@ jobs:
       run: |
         mkdir -p build && cd build
         source ${HOME}/venv/bin/activate
+        export PYTHONPATH=$PYTHONPATH:.
         ## Simulation across all tests.
         #pytest .. -v --tb=short
         ## CtrlMemDynamicRTL

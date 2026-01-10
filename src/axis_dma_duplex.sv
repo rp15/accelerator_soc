@@ -153,7 +153,7 @@ module axis_dma_duplex #(
   // Present packet to AXIS sink (CGRA) when a full packet is buffered
   assign s_axis_tdata[(BEATS_PER_PKT-1)*AXI_DATA_W +: AXI_DATA_W] = axi_i.r.data;
   //assign s_axis_tdata[0 +: (BEATS_PER_PKT-1)*AXI_DATA_W]          = rx_shift[0 +: (BEATS_PER_PKT-1)*AXI_DATA_W];
-  //assign s_axis_tdata = axi_i.r.data; TODO resilient fix for singe beat per packet.
+  //assign s_axis_tdata = axi_i.r.data; TODO resilient fix for single beat per packet.
   genvar i;
 
   generate
